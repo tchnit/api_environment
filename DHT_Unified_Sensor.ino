@@ -1,39 +1,27 @@
-// DHT Temperature & Humidity Sensor
-// Unified Sensor Library Example
-// Written by Tony DiCola for Adafruit Industries
-// Released under an MIT license.
-
-// REQUIRES the following Arduino libraries:
-// - DHT Sensor Library: https://github.com/adafruit/DHT-sensor-library
-// - Adafruit Unified Sensor Lib: https://github.com/adafruit/Adafruit_Sensor
 
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
-#include <ESPAsyncWebServer.h>
+// #include <ESPAsyncWebServer.h>
+#include <HTTPClient.h>
 
 const char* ssid = "CTCO_2.4"; // Tên mạng WiFi của bạn
 const char* password = "1611060291"; // Mật khẩu mạng WiFi của bạn
-String jsonOutput;
+// const char* password = "123456789";
+String jsonStr;
+StaticJsonDocument<200> doc;
 
-AsyncWebServer server(80);
-// WiFiClient client = server.available();
+HTTPClient http;
+
+// AsyncWebServer server(80);
 #define Rainpin 35
 #define COpin 34
 
 #define DHTPIN 15     // Digital pin connected to the DHT sensor 
-// Feather HUZZAH ESP8266 note: use pins 3, 4, 5, 12, 13 or 14 --
-// Pin 15 can work but DHT must be disconnected during program upload.
-
-// Uncomment the type of sensor in use:
-//#define DHTTYPE    DHT11     // DHT 11
 #define DHTTYPE    DHT22     // DHT 22 (AM2302)
-//#define DHTTYPE    DHT21     // DHT 21 (AM2301)
 
-// See guide for details on sensor wiring and usage:
-//   https://learn.adafruit.com/dht/overview
 
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
@@ -43,6 +31,7 @@ void setup() {
   Serial.begin(115200);
   // Initialize device.
   dht.begin();
+  pinMode(2,OUTPUT);
 
   WiFi.begin(ssid, password);
   Serial.println("Connecting to WiFi");
@@ -50,42 +39,24 @@ void setup() {
     delay(1000);
     Serial.println("...");
   }
-  server.begin();
+  // server.begin();
 
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
   // Print temperature sensor details.
   sensor_t sensor;
-  dht.temperature().getSensor(&sensor);
-  Serial.println(F("------------------------------------"));
-  Serial.println(F("Temperature Sensor"));
-  Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-  Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-  Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-  Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("°C"));
-  Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("°C"));
-  Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
-  Serial.println(F("------------------------------------"));
-  // Print humidity sensor details.
+
   dht.humidity().getSensor(&sensor);
-  Serial.println(F("Humidity Sensor"));
-  Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-  Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-  Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-  Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("%"));
-  Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("%"));
-  Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("%"));
-  Serial.println(F("------------------------------------"));
-  // Set delay between sensor readings based on sensor details.
-  delayMS = sensor.min_delay / 10000;
+  delayMS = sensor.min_delay / 1000;
+
+
 
 }
-StaticJsonDocument<200> doc;
 
 void loop() {
   // Delay between measurements.
-  delay(delayMS);
+  // delay(delayMS);
   // Get temperature event and print its value.
   sensors_event_t event;
   dht.temperature().getEvent(&event);
@@ -93,44 +64,93 @@ void loop() {
     Serial.println(F("Error reading temperature!"));
   }
   else {
-    Serial.print(F("Temperature: "));
+    // Serial.print(F("Temperature: "));
     Serial.print(event.temperature);
-    Serial.println(F("°C"));
-    doc["Temperature"] = event.temperature;
+    // Serial.println(F("°C"));
+// int temperature = event.temperature;
+    doc["temperture"] = String(event.temperature);
 
   }
+  
+  int valueCO= analogRead(COpin);
+  // Serial.print("CO value: ");
+  // Serial.println(valueCO);
+  doc["gasdata"] = String(valueCO);
+
   // Get humidity event and print its value.
   dht.humidity().getEvent(&event);
   if (isnan(event.relative_humidity)) {
     Serial.println(F("Error reading humidity!"));
   }
   else {
-    Serial.print(F("Humidity: "));
+    // Serial.print(F("Humidity: "));
     Serial.print(event.relative_humidity);
-    Serial.println(F("%"));
-    doc["Humidity"] = event.relative_humidity;
+    // Serial.println(F("%"));
+    doc["humidity"] = String(event.relative_humidity);
+// int humidity = event.relative_humidity;
+    // doc["humidity"] = String(humidity);
 
   }
-  int valueCO= analogRead(COpin);
-  Serial.print("CO value: ");
-  Serial.println(valueCO);
+  if (String(event.relative_humidity)="null"){
+  dht.begin();} 
 
   int rain= analogRead(Rainpin);
-  Serial.print("Rain value: ");
-  Serial.println(4095-rain);
+  // Serial.print("Rain value: ");
+  // Serial.println(4095-rain);
 
-  doc["COvalue"] = valueCO;
-  doc["Rainvalue"] = 4095-rain;
-  jsonOutput="";
-  serializeJson(doc, jsonOutput);
+  if (rain<4090)
+  doc["raindrop"] = true;
+  else
+  doc["raindrop"] = false;
+
+  jsonStr="";
+ 
+  serializeJson(doc, jsonStr);
 
   // In ra serial monitor
-  Serial.println(jsonOutput);
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", jsonOutput);
+  // Serial.println(jsonOutput);
+  // server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    // request->send(200, "text/plain", jsonOutput);
     // client.println("<h1>ESP32 Web Server</h1>");
-  });
+  // });
 
+sendAPIRequest(jsonStr);
 
+}
+// String serverUrl="http://http://27.78.218.89:88/updateReport";
+const char* serverUrl = "http://27.78.218.89:88/updateReport";
 
+void sendAPIRequest(String jsonStr) {
+  delay(2000);
+    int contentLength = jsonStr.length();
+
+  String host = serverUrl;
+  host.remove(0, 7); // Loại bỏ "http://"
+
+  // Tách phần path từ URL
+  int pathIndex = host.indexOf("/");
+  String path = host.substring(pathIndex);
+  host.remove(pathIndex);
+
+  // Gửi yêu cầu HTTP PUT
+  HTTPClient http;
+  http.begin(serverUrl);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Content-Length", String(contentLength));
+  http.addHeader("Host", host);
+    Serial.println(host);
+    Serial.println(jsonStr);
+  int httpResponseCode = http.PUT(jsonStr);
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+      if (httpResponseCode=200){
+        digitalWrite(2, HIGH);  // turn the LED on (HIGH is the voltage level)
+        delay(100);                      // wait for a second
+        digitalWrite(2, LOW);   // turn the LED off by making the voltage LOW
+        delay(100);  
+      }
+      String payload = http.getString();
+      Serial.println("Response payload:");
+      Serial.println(payload);
+  
 }
